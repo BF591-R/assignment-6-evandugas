@@ -1,8 +1,8 @@
 #!/usr/bin/Rscript
-## Author: Taylor Falk
-## tfalk@bu.edu
-## BU BF591
-## Assignment Week 6
+## Author: Evan Dugas
+## edugas@bu.edu
+## BU BF530
+## Assignment 6
 
 libs <- c("tidyverse", "ggVennDiagram", "BiocManager",
           "DESeq2", "edgeR", "limma")
@@ -33,7 +33,10 @@ for (package in libs) {
 #'
 #' @examples counts_df <- load_n_trim("/path/to/counts/verse_counts.tsv")
 load_n_trim <- function(filename) {
-    return(NULL)
+    df <- read.table(filename, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+    row.names(df) <- df$gene
+    df <- df[, c("vP0_1", "vP0_2", "vAd_1", "vAd_2")]
+    return(df)
 }
 
 #' Perform a DESeq2 analysis of rna seq data
@@ -57,7 +60,13 @@ load_n_trim <- function(filename) {
 #'
 #' @examples run_deseq(counts_df, coldata, 10, "condition_day4_vs_day7")
 run_deseq <- function(count_dataframe, coldata, count_filter, condition_name) {
-    return(NULL)
+    count_dataframe <- count_dataframe[rowSums(count_dataframe) >= count_filter, ]
+    dds <- DESeqDataSetFromMatrix(countData = count_dataframe,
+                                  colData = coldata,
+                                  design = ~ condition)
+    dds <- DESeq(dds)
+    res <- results(dds, name = condition_name)
+    return(res)
 }
 
 #### edgeR ####
@@ -77,7 +86,13 @@ run_deseq <- function(count_dataframe, coldata, count_filter, condition_name) {
 #'
 #' @examples run_edger(counts_df, group)
 run_edger <- function(count_dataframe, group) {
-    return(NULL)
+    dge <- DGEList(counts = count_dataframe, group = group)
+    keep <- filterByExpr(dge)
+    dge <- dge[keep, , keep.lib.sizes = FALSE]
+    dge <- calcNormFactors(dge)
+    dge <- estimateDisp(dge)
+    et <- exactTest(dge)
+    return(et$table)
 }
 
  #### limma ####
@@ -101,7 +116,15 @@ run_edger <- function(count_dataframe, group) {
 #' 
 #' @examples run_limma(counts_df, design, voom=TRUE)
 run_limma <- function(counts_dataframe, design, group) {
-    return(NULL)
+    dge <- DGEList(counts = counts_dataframe, group = group)
+    keep <- filterByExpr(dge)
+    dge <- dge[keep, , keep.lib.sizes = FALSE]
+    dge <- calcNormFactors(dge)
+    v <- voom(dge, design)
+    fit <- lmFit(v, design)
+    fit <- eBayes(fit)
+    res <- topTable(fit, coef = ncol(design), number = Inf, sort.by = "p")
+    return(res)
 }
 
 #### ggplot ####
@@ -133,7 +156,13 @@ run_limma <- function(counts_dataframe, design, group) {
 #' 2 deseq   9.97e-261
 #' 3 deseq   1.16e-206
 combine_pval <- function(deseq, edger, limma) {
-    return(NULL)
+    pvals <- data.frame(
+        deseq = deseq$pvalue,
+        edger = edger$PValue,
+        limma = limma$P.Value
+    )
+    gathered <- tidyr::gather(pvals, key = "package", value = "pval")
+    return(gathered)
 }
 
 #' Create three separate facets for each of the diff. exp. pacakges.
@@ -157,7 +186,23 @@ combine_pval <- function(deseq, edger, limma) {
 #' 1  -9.84 2.23e-180 edgeR  
 #' 2   6.18 5.87e-179 edgeR  
 create_facets <- function(deseq, edger, limma) {
-    return(NULL)
+    deseq_df <- data.frame(
+        logFC = deseq$log2FoldChange,
+        padj = deseq$padj,
+        package = "DESeq2"
+    )
+    edger_df <- data.frame(
+        logFC = edger$logFC,
+        padj = edger$padj,
+        package = "edgeR"
+    )
+    limma_df <- data.frame(
+        logFC = limma$logFC,
+        padj = limma$adj.P.Val,
+        package = "Limma"
+    )
+    result <- rbind(deseq_df, edger_df, limma_df)
+    return(as_tibble(result))
 }
 
 #' Create an attractive volcano plot of three diff. exp. packages' data.
@@ -187,6 +232,22 @@ create_facets <- function(deseq, edger, limma) {
 #'
 #' @examples p <- theme_plot(volcano)
 theme_plot <- function(volcano_data) {
-    return(NULL)
+    p <- ggplot(volcano_data, aes(x = logFC, y = -log10(padj),
+                                   color = padj < 1e-100)) +
+        geom_point(size = 1.5, alpha = 0.7) +
+        scale_color_manual(values = c("FALSE" = "steelblue", "TRUE" = "red"),
+                           labels = c(">=1e-100", "<1e-100"),
+                           name = "Adj. P-Value") +
+        facet_wrap(~ package) +
+        labs(x = expression(log[2]~"Fold Change"),
+             y = expression(-log[10]~"Adjusted P-value"),
+             title = "Volcano Plots: Top 1,000 Genes by P-value") +
+        theme_minimal() +
+        theme(
+            plot.title = element_text(hjust = 0.5, face = "bold"),
+            strip.text = element_text(face = "bold", size = 12),
+            legend.position = "bottom"
+        )
+    return(p)
 }
 

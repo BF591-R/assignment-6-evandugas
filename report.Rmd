@@ -1,7 +1,7 @@
 ---
 title: "Assignment 6 Report"
-author: "Taylor Falk"
-date: "1/24/2022"
+author: "Evan Dugas"
+date: "3/29/2026"
 output: html_document
 ---
 
